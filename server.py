@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from mcpcore import McpError, Tool, run
-from retrieval import rerank
+from retrieval import embeddings_status, semantic_rerank
 from ris import CASELAW_APPS, LEGISLATION_APPS, RisClient, RisError
 
 __version__ = "1.0.0"
@@ -63,12 +63,16 @@ def _t_search_legislation(args: Dict[str, Any]) -> Any:
         )
     except RisError as exc:
         raise McpError(str(exc)) from exc
-    ranked = rerank(query, raw["results"], fields=("title", "long_title"))
+    ranked = semantic_rerank(query, raw["results"], fields=("title", "long_title"))
     return {
         "total_upstream": raw["total"],
-        "returned": len(ranked),
-        "ranking": "Reranked locally by relevance — RIS returns hits alphabetically.",
-        "results": ranked,
+        "returned": len(ranked["results"]),
+        "ranking": {
+            "method": ranked["method"],
+            "note": ranked.get("note") or ranked.get("warning"),
+            "why": "RIS returns hits alphabetically, not by relevance.",
+        },
+        "results": ranked["results"],
     }
 
 
@@ -85,14 +89,19 @@ def _t_search_caselaw(args: Dict[str, Any]) -> Any:
         )
     except RisError as exc:
         raise McpError(str(exc)) from exc
-    ranked = rerank(terms, raw["results"], fields=("docket", "norms", "legal_areas", "court"))
+    ranked = semantic_rerank(terms, raw["results"],
+                             fields=("docket", "norms", "legal_areas", "court"))
     return {
         "total_upstream": raw["total"],
-        "returned": len(ranked),
-        "ranking": "Reranked locally by relevance — RIS returns hits alphabetically.",
+        "returned": len(ranked["results"]),
+        "ranking": {
+            "method": ranked["method"],
+            "note": ranked.get("note") or ranked.get("warning"),
+            "why": "RIS returns hits alphabetically, not by relevance.",
+        },
         "note": "Results with doc_type 'Rechtssatz' are legal propositions, not "
                 "judgments; see their `decisions` list.",
-        "results": ranked,
+        "results": ranked["results"],
     }
 
 
@@ -118,6 +127,7 @@ def _t_status(args: Dict[str, Any]) -> Any:
             "never sends it; use `title` (Titel) instead.",
             "API v2.5 was retired and now 404s; this client uses v2.6.",
         ],
+        **embeddings_status(),
     }
 
 
